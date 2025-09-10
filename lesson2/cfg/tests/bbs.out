@@ -1,0 +1,30 @@
+Function: mod
+Basic Blocks:
+  B0: instr[0..3]
+CFG successors:
+  B0 -> []
+
+Function: lsb
+Basic Blocks:
+  B0: instr[0..2]
+CFG successors:
+  B0 -> []
+
+Function: square
+Basic Blocks:
+  B0: instr[0..1]
+CFG successors:
+  B0 -> []
+
+Function: main
+Basic Blocks:
+  B0: instr[0..2]
+  loop.branch: instr[3..5]
+  loop.body: instr[6..13]
+  loop.end: instr[14..14]
+CFG successors:
+  B0 -> ['loop.branch']
+  loop.branch -> ['loop.body', 'loop.end']
+  loop.body -> ['loop.branch']
+  loop.end -> []
+

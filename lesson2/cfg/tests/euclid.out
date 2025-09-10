@@ -1,0 +1,24 @@
+Function: main
+Basic Blocks:
+  B0: instr[0..10]
+CFG successors:
+  B0 -> []
+
+Function: mod
+Basic Blocks:
+  B0: instr[0..9]
+CFG successors:
+  B0 -> []
+
+Function: gcd
+Basic Blocks:
+  B0: instr[0..7]
+  for.cond.5: instr[8..10]
+  for.body.5: instr[11..26]
+  for.end.5: instr[27..29]
+CFG successors:
+  B0 -> ['for.cond.5']
+  for.cond.5 -> ['for.body.5', 'for.end.5']
+  for.body.5 -> ['for.cond.5']
+  for.end.5 -> []
+

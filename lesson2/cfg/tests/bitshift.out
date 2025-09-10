@@ -1,0 +1,40 @@
+Function: pow
+Basic Blocks:
+  B0: instr[0..3]
+  then.0: instr[4..6]
+  else.0: instr[7..23]
+  then.12: instr[24..29]
+  else.12: instr[30..32]
+  endif.12: instr[33..35]
+CFG successors:
+  B0 -> ['then.0', 'else.0']
+  then.0 -> []
+  else.0 -> ['then.12', 'else.12']
+  then.12 -> ['endif.12']
+  else.12 -> ['endif.12']
+  endif.12 -> []
+
+Function: mod
+Basic Blocks:
+  B0: instr[0..7]
+CFG successors:
+  B0 -> []
+
+Function: LEFTSHIFT
+Basic Blocks:
+  B0: instr[0..7]
+CFG successors:
+  B0 -> []
+
+Function: RIGHTSHIFT
+Basic Blocks:
+  B0: instr[0..7]
+CFG successors:
+  B0 -> []
+
+Function: main
+Basic Blocks:
+  B0: instr[0..7]
+CFG successors:
+  B0 -> []
+
