@@ -1,0 +1,77 @@
+Function main:
+Block 0
+  in:
+  out:
+    result 1
+    v0 
+Function fib:
+Block 0
+  in:
+  out:
+    v1 
+    v2 3
+    v3 4
+Block 1
+  in:
+    v1 
+    v2 3
+    v3 4
+  out:
+    v1 
+    v2 3
+    v3 4
+    v4 5
+Block 2
+  in:
+    v1 
+    v2 3
+    v3 4
+  out:
+    v1 
+    v2 3
+    v3 4
+    v6 
+    v7 7
+    v8 8
+Block 3
+  in:
+    v1 
+    v2 3
+    v3 4
+    v6 
+    v7 7
+    v8 8
+  out:
+    v1 
+    v2 3
+    v3 4
+    v6 
+    v7 7
+    v8 8
+    v9 9
+Block 4
+  in:
+    v1 
+    v2 3
+    v3 4
+    v6 
+    v7 7
+    v8 8
+  out:
+    f1 13
+    f2 18
+    v1 
+    v10 
+    v11 11
+    v12 12
+    v13 
+    v14 16
+    v15 17
+    v16 13
+    v17 18
+    v18 22
+    v2 3
+    v3 4
+    v6 
+    v7 7
+    v8 8

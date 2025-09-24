@@ -1,0 +1,60 @@
+Function ack:
+Block 0
+  in:
+  out:
+    cond_m 2
+    one 1
+    zero 0
+Block 1
+  in:
+    cond_m 2
+    one 1
+    zero 0
+  out:
+    cond_m 2
+    one 1
+    tmp 3
+    zero 0
+Block 2
+  in:
+    cond_m 2
+    one 1
+    zero 0
+  out:
+    cond_m 2
+    cond_n 4
+    one 1
+    zero 0
+Block 3
+  in:
+    cond_m 2
+    cond_n 4
+    one 1
+    zero 0
+  out:
+    cond_m 2
+    cond_n 4
+    m1 5
+    one 1
+    tmp 6
+    zero 0
+Block 4
+  in:
+    cond_m 2
+    cond_n 4
+    one 1
+    zero 0
+  out:
+    cond_m 2
+    cond_n 4
+    m1 7
+    n1 8
+    one 1
+    t1 9
+    t2 10
+    zero 0
+Function main:
+Block 0
+  in:
+  out:
+    tmp 11
