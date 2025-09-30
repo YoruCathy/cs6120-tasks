@@ -19,7 +19,6 @@ class CFG:
         self.add_block(v)
         self.blocks[v].add(u)
 
-    # convenience: derive succs for reachability/pruning
     def succs(self) -> Dict[str, Set[str]]:
         s: Dict[str, Set[str]] = {n: set() for n in self.blocks}
         for v, preds in self.blocks.items():
@@ -36,7 +35,7 @@ def _reachable_from_entry(cfg: CFG) -> Set[str]:
     q = deque([cfg.entry])
     while q:
         n = q.popleft()
-        if n in seen: 
+        if n in seen:
             continue
         seen.add(n)
         for s in succs.get(n, ()):
@@ -44,31 +43,63 @@ def _reachable_from_entry(cfg: CFG) -> Set[str]:
                 q.append(s)
     return seen
 
-def _prune_unreachable(cfg: CFG) -> None:
-    keep = _reachable_from_entry(cfg)
-    # prune blocks and preds not in keep
-    cfg.blocks = {n: (preds & keep) for n, preds in cfg.blocks.items() if n in keep}
+
+# --------------------------- Reverse Post-Order --------------------------- #
+
+def _reverse_post_order(cfg: CFG) -> List[str]:
+    """Reverse post-order over the whole graph
+    """
+    succs = cfg.succs()
+    seen: Set[str] = set()
+    post: List[str] = []
+
+    def dfs(u: str):
+        if u in seen:
+            return
+        seen.add(u)
+        # sorted for deterministic output (optional)
+        for v in sorted(succs.get(u, ())):
+            dfs(v)
+        post.append(u)
+
+    # Cover reachable from entry first
+    dfs(cfg.entry)
+    # Include any unreachable nodes (order stable/deterministic)
+    for u in sorted(cfg.blocks.keys()):
+        if u not in seen:
+            dfs(u)
+
+    return list(reversed(post))
 
 # --------------------------- Dominators core --------------------------- #
 
 def compute_dominators(cfg: CFG) -> Dict[str, Set[str]]:
-    # be robust to dead blocks
-    _prune_unreachable(cfg)
-
+    """
+    dom = {every block -> all blocks}
+    dom[entry] = {entry}
+    rpo = reverse_post_order(graph)
+    while dom is still changing:
+        for vertex in rpo except entry:
+            dom[vertex] = {vertex} ∪ ⋂(dom[p] for p in vertex.preds)
+    """
     blocks = list(cfg.blocks.keys())
     dom: Dict[str, Set[str]] = {b: set(blocks) for b in blocks}
     dom[cfg.entry] = {cfg.entry}
 
+    rpo = _reverse_post_order(cfg)
+
     changed = True
     while changed:
         changed = False
-        for v in blocks:
+        for v in rpo:
             if v == cfg.entry:
                 continue
             preds = cfg.blocks[v]
             if preds:
-                new_set = {v}.union(set.intersection(*(dom[p] for p in preds)))
+                meet = set.intersection(*(dom[p] for p in preds))
+                new_set = {v} | meet
             else:
+                # No predecessors: dominated only by itself
                 new_set = {v}
             if new_set != dom[v]:
                 dom[v] = new_set
@@ -79,7 +110,7 @@ def immediate_dominators(dom, entry):
     idom = {}
     for v, D in dom.items():
         if v == entry:
-            idom[v] = None   # or entry, just be consistent
+            idom[v] = None   # could be entry as well
             continue
         strict = D - {v}
         imm = None
@@ -92,7 +123,6 @@ def immediate_dominators(dom, entry):
             imm = max(strict, key=lambda x: len(dom[x]))
         idom[v] = imm
     return idom
-
 
 def dominator_tree(idom: Dict[str, Optional[str]]) -> Dict[str, List[str]]:
     tree: Dict[str, List[str]] = {n: [] for n in idom}
