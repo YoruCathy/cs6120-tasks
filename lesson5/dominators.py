@@ -75,22 +75,24 @@ def compute_dominators(cfg: CFG) -> Dict[str, Set[str]]:
                 changed = True
     return dom
 
-def immediate_dominators(dom: Dict[str, Set[str]], entry: str) -> Dict[str, Optional[str]]:
-    idom: Dict[str, Optional[str]] = {}
+def immediate_dominators(dom, entry):
+    idom = {}
     for v, D in dom.items():
         if v == entry:
-            idom[v] = None
+            idom[v] = None   # or entry, just be consistent
             continue
-        candidates = D - {v}
+        strict = D - {v}
         imm = None
-        for d in candidates:
-            if all(d not in dom[c] or c == d for c in candidates):
+        for d in strict:
+            others = strict - {d}
+            if all(o in dom[d] for o in others):
                 imm = d
                 break
-        if imm is None and candidates:
-            imm = max(candidates, key=lambda x: len(dom[x]))
+        if imm is None and strict:
+            imm = max(strict, key=lambda x: len(dom[x]))
         idom[v] = imm
     return idom
+
 
 def dominator_tree(idom: Dict[str, Optional[str]]) -> Dict[str, List[str]]:
     tree: Dict[str, List[str]] = {n: [] for n in idom}

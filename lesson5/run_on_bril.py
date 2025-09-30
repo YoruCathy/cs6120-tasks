@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 import sys, json, os, argparse
-from typing import Dict, List, Optional
 from collections import defaultdict
+import networkx as nx
+from typing import Dict, List, Optional, Set
+
 from dominators import (
     CFG, compute_dominators, immediate_dominators,
     dominance_frontier, ascii_dom_tree, render_all_graphs
@@ -24,23 +26,20 @@ def leaders(instrs: List[Dict], lblpos: Dict[str, int]) -> List[int]:
     L = set()
     n = len(instrs)
     if n > 0:
-        L.add(0)  # first instruction starts a block (prefix before first label)
+        L.add(0)  # prefix before first label is a block if it exists
     for i, ins in enumerate(instrs):
         op = ins.get("op")
-        if op == "br":
+        if is_label(ins):
+            L.add(i)  # label starts a block
+        elif op == "br":
             for tgt in ins.get("labels", []):
                 if tgt in lblpos:
                     L.add(lblpos[tgt])
-            if i + 1 < n:
-                L.add(i + 1)  # fallthrough after the branch instruction
         elif op == "jmp":
             tgt = ins.get("labels", [None])[0]
             if tgt in lblpos:
                 L.add(lblpos[tgt])
-            if i + 1 < n:
-                L.add(i + 1)
-        elif is_label(ins):
-            L.add(i)  # label itself starts a block
+        # ret: no leaders to add
     return sorted(L)
 
 def block_index_of_pos(leaders_list: List[int], instrs: List[Dict], pos: int) -> Optional[int]:
@@ -54,11 +53,7 @@ def block_index_of_pos(leaders_list: List[int], instrs: List[Dict], pos: int) ->
     return None
 
 def split_into_blocks(instrs: List[Dict]):
-    """Return (blocks, edges, preds) where:
-       blocks: list of lists of instructions (labels removed)
-       edges:  dict int->list[int]
-       preds:  dict int->list[int]
-    """
+    """Return (blocks, edges, preds) for block graph built by leaders/splitting."""
     lblpos = label_positions(instrs)
     L = leaders(instrs, lblpos)
     boundaries = L + [len(instrs)]
@@ -96,8 +91,7 @@ def split_into_blocks(instrs: List[Dict]):
                 if tb is not None:
                     edges[bidx].append(tb)
         elif op == "ret":
-            # no fallthrough
-            pass
+            pass  # no fallthrough
         else:
             # fallthrough
             if bidx + 1 < len(blocks):
@@ -122,9 +116,106 @@ def cfg_from_blocks(edges: Dict[int, List[int]], nb: int) -> CFG:
             cfg.add_edge(names[u], names[v])
     return cfg
 
+# -------------------------- NetworkX comparison -------------------------- #
+
+def nx_graph_from_cfg(cfg: CFG):
+    """Build a NetworkX DiGraph from our CFG object."""
+    G = nx.DiGraph()
+    succs = cfg.succs()
+    G.add_nodes_from(succs.keys())
+    for u, vs in succs.items():
+        for v in vs:
+            G.add_edge(u, v)
+    return G
+
+def dom_sets_from_idom(idom_map: Dict[str, Optional[str]]):
+    """Reconstruct Dom sets from an idom map (handles root=None or root->root)."""
+    dom = {}
+    for v in idom_map.keys():
+        s = set()
+        cur = v
+        seen = set()
+        while cur is not None and cur not in seen:
+            seen.add(cur)
+            s.add(cur)
+            p = idom_map[cur]
+            if p == cur:  # if any convention uses root->root
+                break
+            cur = p
+        dom[v] = s
+    return dom
+
+def compare_maps_of_sets(a, b) -> (bool, List[str]):
+    ok = True
+    diffs = []
+    keys = sorted(set(a.keys()) | set(b.keys()))
+    for k in keys:
+        sa = set(a.get(k, set()))
+        sb = set(b.get(k, set()))
+        if sa != sb:
+            ok = False
+            diffs.append(
+                f"- Mismatch for {k}:\n"
+                f"  yours: {sorted(sa)}\n"
+                f"  nx   : {sorted(sb)}"
+            )
+    return ok, diffs
+
+def compare_idoms(yours_idom: Dict[str, Optional[str]], nx_idom_raw: Dict[str, str]):
+    # Normalize: entry maps to None for both
+    norm_yours = {n: (None if p == n else p) for n, p in yours_idom.items()}
+    norm_nx    = {n: (None if p == n else p) for n, p in nx_idom_raw.items()}
+    ok = True
+    diffs = []
+    for n in sorted(set(norm_yours) | set(norm_nx)):
+        if norm_yours.get(n) != norm_nx.get(n):
+            ok = False
+            diffs.append(f"- idom mismatch for {n}: yours={norm_yours.get(n)} nx={norm_nx.get(n)}")
+    return ok, diffs
+
+def nx_cross_check(cfg: CFG, my_dom: Dict[str, Set[str]], my_idom: Dict[str, Optional[str]]):
+    entry = cfg.entry
+    G = nx_graph_from_cfg(cfg)
+
+    # 1) compare immediate dominators
+    nx_idom_raw = nx.immediate_dominators(G, entry)  # root maps to itself
+    ok_idom, diffs_idom = compare_idoms(my_idom, nx_idom_raw)
+    if not ok_idom:
+        print("Immediate dominators differ:")
+        for d in diffs_idom:
+            print(d)
+
+    # 2) compare dominator sets (reconstruct from nx idoms)
+    nx_idom_norm = {n: (None if p == n else p) for n, p in nx_idom_raw.items()}
+    nx_dom_sets = dom_sets_from_idom(nx_idom_norm)
+
+    ok_dom, diffs_dom = compare_maps_of_sets(my_dom, nx_dom_sets)
+    if not ok_dom:
+        print("Dominator sets differ:")
+        for d in diffs_dom:
+            print(d)
+
+    # 3) compare dominance frontier (compute with both idom maps using same DF routine)
+    nx_df = dominance_frontier(cfg, nx_idom_norm)
+    my_df = dominance_frontier(cfg, my_idom)
+    ok_df, diffs_df = compare_maps_of_sets(my_df, nx_df)
+    if not ok_df:
+        print("Dominance frontiers differ:")
+        for d in diffs_df:
+            print(d)
+
+    all_ok = ok_idom and ok_dom and ok_df
+    if all_ok:
+        print("NetworkX cross-check passed (idoms, dom-sets, DF match).")
+    return all_ok
+
+
+# --------------------------------- Main --------------------------------- #
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--func", help="Function name to analyze (default: first)")
+    ap.add_argument("--nx_check", action="store_true", help="Compare with NetworkX")
     ap.add_argument("-o", "--outdir", default="bril_out", help="Output directory")
     ap.add_argument("--fmt", default="png", choices=["png", "svg", "pdf"], help="Image format")
     ap.add_argument("--view", action="store_true", help="Open rendered images")
@@ -158,6 +249,11 @@ def main():
     print("Function:", fn.get("name", "<anon>"))
     print("Blocks:", [f"B{i}" for i in range(len(blocks))])
     print("\nASCII Dominator Tree:\n" + ascii_dom_tree(idom))
+
+    if args.nx_check:
+        ok = nx_cross_check(cfg, dom, idom)
+        if not ok:
+            print("NetworkX cross-check FAILED.", file=sys.stderr)
 
     os.makedirs(args.outdir, exist_ok=True)
     render_all_graphs(cfg, idom, df, out_dir=args.outdir, fmt=args.fmt, view=args.view)
